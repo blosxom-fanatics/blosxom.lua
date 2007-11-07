@@ -11,10 +11,10 @@ require "List"
 Entry = Class { super = nil,
 	__tostring = function (self)
 		return string.format(
-			"#<Entry title=%q path=%q time=%d>",
+			"#<Entry title=%q path=%q time=%s>",
 			self.title,
 			self.path,
-			self.time
+			os.date("%Y-%m-%d %H:%M:%S", self.time)
 		)
 	end,
 
@@ -81,29 +81,71 @@ ELua = Class { super = nil,
 	end,
 }
 
+Bluasxom = Class { super = nil,
+	initialize = function (self, config)
+		self.config = config
+	end,
 
-function get_entries(dir, ext)
-	local ret = List.new()
-	local tf = os.tmpname()
-	-- ruby++
-	os.execute('ruby -rpathname -e "Pathname.glob(%|'..dir..'/**/*'..ext..'|){|f|puts %|#{f.mtime.to_i} #{f}|}" > ' .. tf)
-	for line in io.lines(tf) do
-		local time, filename = string.match(line, "(%d+) (.+)")
-		local e = Entry.new(filename, tonumber(time, 10))
-		e.name = string.gsub(string.gsub(filename, "%.%w+$", ""), "^"..dir, "")
-		ret:push(e)
-	end
-	return ret
-end
+	run = function (self)
+		path_info = os.getenv("PATH_INFO") or "/"
+		flavour   = string.match(path_info, "(%..+)$") or ".html"
+		path_info = string.gsub(path_info, "%..+$", "")
+		path_info = string.gsub(path_info, "index$", "")
 
-ELua.run("template.html", {
-	title    = "test",
-	home     = os.getenv("SCRIPT_NAME"),
-	server   = "http://" .. tostring(os.getenv("SERVER_NAME")),
-	entries  =
-		get_entries("data", ".txt"):sort(function (a, b)
+		local entries = self.get_entries(self.config.datadir, self.config.dataext):sort(function (a, b)
 			return a.time > b.time
-		end),
-	debugObj = "aaa",
-})
+		end)
+
+		local year, month, day
+		for i, v in ipairs({"^/(%d+)/(%d+)/(%d+)", "^/(%d+)/(%d+)", "^/(%d+)"}) do
+			year, month, day = string.match(path_info, v)
+			if year then break end
+		end
+		if year then
+			entries = entries:select(function (e)
+				local ret = true
+				for i, v in ipairs({{m = "%Y", v = year}, {m = "%m", v = month}, {m = "%d", v = day}}) do
+					if v.v and not(os.date(v.m, e.time) == v.v) then
+						ret = false
+					end
+				end
+				return ret
+			end)
+		else
+			entries = entries:select(function (e)
+				return string.match(e.name, "^"..path_info)
+			end)
+		end
+
+		ELua.run("template"..flavour, {
+			title    = self.config.title,
+			home     = os.getenv("SCRIPT_NAME"),
+			server   = "http://" .. tostring(os.getenv("SERVER_NAME")),
+			entries  = entries,
+			debugObj = "aaa",
+		})
+
+	end,
+
+	get_entries = function (dir, ext)
+		local ret = List.new()
+		local tf = os.tmpname()
+		-- ruby++
+		os.execute('ruby -rpathname -e "Pathname.glob(%|'..dir..'/**/*'..ext..'|){|f|puts %|#{f.mtime.to_i} #{f}|}" > ' .. tf)
+		for line in io.lines(tf) do
+			local time, filename = string.match(line, "(%d+) (.+)")
+			local e = Entry.new(filename, tonumber(time, 10))
+			e.name = string.gsub(string.gsub(filename, "%.%w+$", ""), "^"..dir, "")
+			ret:push(e)
+		end
+		return ret
+	end,
+}
+
+Bluasxom.new({
+	title   = "Bluasxom",
+	author  = "jitensya",
+	dataext = ".txt",
+	datadir = "data",
+}):run()
 
