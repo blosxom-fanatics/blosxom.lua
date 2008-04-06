@@ -8,7 +8,7 @@ DESCRIPTION
 リストを扱うクラス
 
 
-SYNOPSYS
+SYNOPSIS
 --------
 
 	l1 = List.new(1, 2, 3)
@@ -238,7 +238,7 @@ List = Class { super = nil,
 		local ret = List.new(unpack(self))
 		return qsort(ret, 1, ret.n, function (data) return data end)
 	end,
-	
+
 	sortBy = function (self, fun)
 		return self:map(function (i)
 			return { o = i, s = fun(i) }
